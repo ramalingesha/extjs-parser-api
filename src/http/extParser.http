@@ -1,0 +1,6 @@
+@baseUrl = http://localhost:3000
+
+### Upload sample ext file
+POST {{baseUrl}}/api/parse
+
+file=@./src/ext-files/sample-ext.js
