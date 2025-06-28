@@ -1,36 +1,45 @@
-import { ReactComponentMapping } from "../types/ComponentTypes";
+import { ReactComponentMapping } from '../types/ComponentTypes';
 
-export function generateJSXCode(component: ReactComponentMapping): string {
-  const { tag, props = {}, events = {}, label } = component;
-
+export function generateJSXCode(component: ReactComponentMapping, indent = 0): string {
+  const { tag, props = {}, events = {}, label, children = [] } = component;
   const id = props.id || props.name || 'field';
-  if (!props.id) {
-    props.id = id;
-  }
+
+  const pad = '  '.repeat(indent);
 
   const propStr = Object.entries(props)
+    .filter(([key]) => key !== 'children')
     .map(([key, value]) =>
-      typeof value === 'string' && !value.startsWith('{')
+      typeof value === 'string' && !value.startsWith('{') && !value.includes('{')
         ? `${key}="${value}"`
         : `${key}={${value}}`
-    )
-    .join(' ');
+    ).join(' ');
 
   const eventStr = Object.entries(events)
     .map(([key, handler]) => `${key}={${handler}}`)
     .join(' ');
 
-  const parts = [propStr, eventStr].filter(Boolean).join(' ');
-  const inputLine = `<${tag} ${parts} />`;
+  const attrs = [propStr, eventStr].filter(Boolean).join(' ').trim();
+  const openingTag = `<${tag}${attrs ? ' ' + attrs : ''}>`;
+  const closingTag = `</${tag}>`;
 
-  if (label) {
-    return [
-      `<div className="p-field">`,
-      `  <label htmlFor="${id}">${label}</label>`,
-      `  ${inputLine}`,
-      `</div>`
-    ].join('\n');
+  const childContent = props.children
+    ? props.children
+    : children.map(child => generateJSXCode(child, indent + 1)).join('\n');
+
+  const isInput = ['InputText', 'InputTextarea', 'InputNumber', 'Calendar', 'Dropdown'].includes(tag);
+
+  if (label && isInput) {
+    return `${pad}<div className="p-field">
+${pad}  <label htmlFor="${id}">${label}</label>
+${pad}  <${tag} ${attrs} />
+${pad}</div>`;
   }
 
-  return inputLine.trim();
+  if (children.length || props.children) {
+    return `${pad}${openingTag}
+${childContent}
+${pad}${closingTag}`;
+  }
+
+  return `${pad}<${tag} ${attrs} />`;
 }

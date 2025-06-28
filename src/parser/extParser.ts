@@ -8,38 +8,82 @@ export function parseExtJSCode(fileContent: string): any[] {
     plugins: ['jsx']
   });
 
-  const components: any[] = [];
+  const instanceMap = new Map<string, any>();
+  const assignments: { target: string; prop: string; value: any }[] = [];
 
   traverse(ast, {
+    VariableDeclarator(path) {
+      const { id, init } = path.node;
+
+      if (
+        t.isIdentifier(id) &&
+        t.isNewExpression(init) &&
+        t.isMemberExpression(init.callee)
+      ) {
+        const callee = init.callee;
+        const xtype = t.isIdentifier(callee.property)
+          ? callee.property.name.toLowerCase()
+          : 'unknown';
+
+        const config: any = { xtype };
+
+        instanceMap.set(id.name, config);
+      }
+    },
+
+    AssignmentExpression(path) {
+      const { left, right } = path.node;
+      if (
+        t.isMemberExpression(left) &&
+        t.isIdentifier(left.object) &&
+        t.isIdentifier(left.property)
+      ) {
+        const varName = left.object.name;
+        const key = left.property.name;
+
+        const value = extractValue(right, instanceMap);
+        if (instanceMap.has(varName)) {
+          const existing = instanceMap.get(varName);
+          if (key === 'items' && Array.isArray(value)) {
+            existing.items = value.map(v => (typeof v === 'string' ? instanceMap.get(v) || { ref: v } : v));
+          } else {
+            existing[key] = value;
+          }
+        }
+      }
+    },
+
     CallExpression(path) {
       const { node } = path;
 
-      // Match Ext.create(...)
       if (
         t.isMemberExpression(node.callee) &&
         t.isIdentifier(node.callee.object, { name: 'Ext' }) &&
         t.isIdentifier(node.callee.property, { name: 'create' })
       ) {
         const args = node.arguments;
-
-        if (
-          args.length >= 2 &&
-          t.isStringLiteral(args[0]) &&
-          t.isObjectExpression(args[1])
-        ) {
-          const xtype = args[0].value.split('.').pop()?.toLowerCase(); // e.g., 'textfield'
+        if (args.length >= 2 && t.isStringLiteral(args[0]) && t.isObjectExpression(args[1])) {
+          const xtype = args[0].value.split('.').pop()?.toLowerCase();
           const config = extractComponentConfig(args[1]);
-
-          // Set xtype manually
           config.xtype = xtype;
-
-          components.push(config);
+          instanceMap.set(`_anonymous_${instanceMap.size}`, config);
         }
       }
     }
   });
 
-  return components;
+  // Return only top-level components (not ones nested in others)
+  const all = Array.from(instanceMap.values());
+  const nested = new Set();
+
+  for (const comp of all) {
+    if (Array.isArray(comp.items)) {
+      comp.items.forEach((child: unknown) => nested.add(child));
+    }
+  }
+
+  const roots = all.filter(comp => !nested.has(comp));
+  return roots;
 }
 
 function extractComponentConfig(obj: t.ObjectExpression): any {
@@ -48,37 +92,28 @@ function extractComponentConfig(obj: t.ObjectExpression): any {
   for (const prop of obj.properties) {
     if (t.isObjectProperty(prop) && t.isIdentifier(prop.key)) {
       const key = prop.key.name;
+      const val = prop.value;
 
-      if (t.isStringLiteral(prop.value)) {
-        config[key] = prop.value.value;
-
-      } else if (t.isNumericLiteral(prop.value)) {
-        config[key] = prop.value.value;
-
-      } else if (t.isIdentifier(prop.value)) {
-        config[key] = prop.value.name;
-
-      } else if (t.isObjectExpression(prop.value)) {
-        config[key] = extractComponentConfig(prop.value);
-
-      } else if (t.isArrayExpression(prop.value)) {
-        config[key] = prop.value.elements.map((el) => {
-          if (t.isObjectExpression(el)) {
-            return extractComponentConfig(el);
-          } else if (t.isStringLiteral(el)) {
-            return el.value;
-          } else if (t.isIdentifier(el)) {
-            return el.name;
-          } else {
-            return '[expression]';
-          }
-        });
-
-      } else {
-        config[key] = '[expression]';
-      }
+      config[key] = extractValue(val as t.Expression);
     }
   }
 
   return config;
+}
+
+function extractValue(val: t.Expression, instanceMap?: Map<string, any>): any {
+  if (t.isStringLiteral(val)) return val.value;
+  if (t.isNumericLiteral(val)) return val.value;
+  if (t.isIdentifier(val)) {
+    return instanceMap?.get(val.name) || val.name;
+  }
+  if (t.isArrayExpression(val)) {
+    return val.elements.map(el => {
+      if (t.isObjectExpression(el)) return extractComponentConfig(el);
+      if (t.isIdentifier(el)) return instanceMap?.get(el.name) || el.name;
+      return '[expression]';
+    });
+  }
+  if (t.isObjectExpression(val)) return extractComponentConfig(val);
+  return '[expression]';
 }

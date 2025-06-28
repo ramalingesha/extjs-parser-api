@@ -5,6 +5,7 @@ import { mapExtInputComponent } from '../mappings/componentMapper';
 import { generateJSXCode } from '../generator/generator';
 import { parseExtJSCode } from '../parser/extParser';
 import { flattenComponents } from '../parser/flattenComponents';
+import { ReactComponentMapping } from '../types/ComponentTypes';
 
 export const handleParse = async (req: Request, res: Response): Promise<void> => {
   const file = req.file;
@@ -18,17 +19,15 @@ export const handleParse = async (req: Request, res: Response): Promise<void> =>
   try {
     const content = await fs.readFile(filePath, 'utf-8');
     const rawComponents = parseExtJSCode(content);
-    const flatComponents = flattenComponents(rawComponents);
 
-    console.log('flattenedComponents', flatComponents);
-
-    const mapped = flatComponents
+    const topLevelMapped = rawComponents
       .map(mapExtInputComponent)
-      .filter((c): c is NonNullable<typeof c> => !!c);
+      .filter((c): c is ReactComponentMapping => c !== null);
 
-    const jsx = mapped.map(generateJSXCode);
 
-    res.json({ components: mapped, jsx });
+    const jsxCode = topLevelMapped.map(generateJSXCode);
+
+    res.json({ components: topLevelMapped, jsxCode });
   } finally {
     await fs.rm(filePath, { force: true });
   }

@@ -4,3 +4,6 @@
 POST {{baseUrl}}/api/parse
 
 file=@./src/ext-files/sample-ext.js
+
+# curl -X POST http://localhost:3000/api/parse \
+#   -F "file=@./src/ext-files/sample-ext.js"
