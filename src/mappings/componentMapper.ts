@@ -1,70 +1,49 @@
-import { ReactComponentMapping } from '../types/ComponentTypes';
+import { ObjectExpression, isIdentifier, isObjectProperty, isStringLiteral } from '@babel/types';
+import { ComponentConfig } from '../types/ComponentTypes';
 
-const EVENT_MAP: Record<string, string> = {
-  change: 'onChange',
-  blur: 'onBlur',
-  focus: 'onFocus',
-  select: 'onSelect',
-  click: 'onClick',
-  keyup: 'onKeyUp',
-  keydown: 'onKeyDown'
-};
-
-export function mapExtInputComponent(ext: any): ReactComponentMapping | null {
-  if (!ext || typeof ext !== 'object' || !ext.xtype) return null;
-
-  const {
-    xtype, name, fieldLabel, emptyText, value, id, text, boxLabel, listeners = {}, items = []
-  } = ext;
-
-  const props: Record<string, any> = {
-    ...(name && { name }),
-    ...(emptyText && { placeholder: emptyText }),
-    ...(value !== undefined && { value }),
-    ...(boxLabel && { children: boxLabel }),
-    id: id || name || `field-${Math.random().toString(36).slice(2)}`
+/**
+ * Extracts key-value pairs from an ObjectExpression AST node and returns a ComponentConfig.
+ *
+ * @param node - Babel AST ObjectExpression node representing ExtJS component config
+ * @returns Parsed ComponentConfig with raw key-value pairs
+ */
+export function parseComponent(node: ObjectExpression): ComponentConfig {
+  const config: ComponentConfig = {
+    type: 'Unknown',
+    props: {},
+    items: [],
   };
 
-  if (text && xtype === 'button') {
-    props.children = text;
-  }
+  node.properties.forEach((prop) => {
+    if (!isObjectProperty(prop)) return;
 
-  const events: Record<string, any> = {};
-  for (const [event, handler] of Object.entries(listeners)) {
-    const reactEvent = EVENT_MAP[event.toLowerCase()];
-    if (reactEvent) events[reactEvent] = handler;
-  }
+    let key: string;
 
-  let tag = '';
-  let children: ReactComponentMapping[] = [];
+    if (isIdentifier(prop.key)) {
+      key = prop.key.name;
+    } else if (isStringLiteral(prop.key)) {
+      key = prop.key.value;
+    } else {
+      return; // Skip unknown key types
+    }
 
-  switch (xtype) {
-    case 'textfield': tag = 'InputText'; break;
-    case 'textarea': tag = 'InputTextarea'; break;
-    case 'numberfield': tag = 'InputNumber'; break;
-    case 'datefield': tag = 'Calendar'; break;
-    case 'combobox': tag = 'Dropdown'; props.options = '[]'; break;
-    case 'checkbox': tag = 'Checkbox'; break;
-    case 'button': tag = 'Button'; break;
-    case 'radiogroup':
-      tag = 'div';
-      children = (items || []).map((item: any) => ({
-        tag: 'RadioButton',
-        props: {
-          name: item.name,
-          value: item.inputValue,
-          children: item.boxLabel
+    const valueNode = prop.value;
+
+    (config.props as any)[key] = valueNode;
+
+    if (key === 'xtype' && isStringLiteral(valueNode)) {
+      config.type = valueNode.value;
+    }
+
+    if (key === 'items' && valueNode.type === 'ArrayExpression') {
+      config.items = valueNode.elements.map((el) => {
+        if (el && el.type === 'ObjectExpression') {
+          return parseComponent(el);
         }
-      }));
-      break;
-    case 'panel': tag = 'div'; break;
-    case 'formpanel': tag = 'form'; break;
-    default: return null;
-  }
+        return null;
+      }).filter(Boolean) as ComponentConfig[];
+    }
+  });
 
-  if (xtype !== 'radiogroup' && Array.isArray(items)) {
-    children = items.map(mapExtInputComponent).filter((c): c is ReactComponentMapping => !!c);
-  }
-
-  return { tag, props, events, label: fieldLabel, children };
+  return config;
 }

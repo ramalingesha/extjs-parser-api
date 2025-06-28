@@ -1,34 +1,30 @@
 import { Request, Response } from 'express';
-import path from 'path';
-import fs from 'fs/promises';
-import { mapExtInputComponent } from '../mappings/componentMapper';
-import { generateJSXCode } from '../generator/generator';
 import { parseExtJSCode } from '../parser/extParser';
-import { flattenComponents } from '../parser/flattenComponents';
-import { ReactComponentMapping } from '../types/ComponentTypes';
+import fs from 'fs';
+import { generateJSX } from '../generator/generator';
 
+/**
+ * Controller to handle ExtJS to React JSX conversion request.
+ * Accepts a file upload (code sample), parses it, and returns JSX.
+ */
 export const handleParse = async (req: Request, res: Response): Promise<void> => {
   const file = req.file;
+
   if (!file) {
-    res.status(400).json({ error: 'No file uploaded' });
+    res.status(400).json({ error: 'No file uploaded.' });
     return;
   }
 
-  const filePath = path.resolve(file.path);
+  const code = fs.readFileSync(file.path, 'utf-8');
 
-  try {
-    const content = await fs.readFile(filePath, 'utf-8');
-    const rawComponents = parseExtJSCode(content);
+  const componentConfig = parseExtJSCode(code);
 
-    const topLevelMapped = rawComponents
-      .map(mapExtInputComponent)
-      .filter((c): c is ReactComponentMapping => c !== null);
-
-
-    const jsxCode = topLevelMapped.map(generateJSXCode);
-
-    res.json({ components: topLevelMapped, jsxCode });
-  } finally {
-    await fs.rm(filePath, { force: true });
+  if (!componentConfig) {
+    res.status(400).json({ error: 'Failed to parse ExtJS component.' });
+    return;
   }
+
+  const jsxCode = generateJSX(componentConfig);
+
+  res.json({ jsxCode });
 };
