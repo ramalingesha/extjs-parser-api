@@ -2,10 +2,14 @@ import * as babelParser from '@babel/parser';
 import traverse from '@babel/traverse';
 import { parseComponent } from '../mappings/componentMapper';
 import { ComponentConfig } from '../types/ComponentTypes';
+import { isObjectExpression } from '@babel/types';
 
 /**
  * Parses ExtJS source code and extracts the component configuration.
- * Supports both `Ext.create(...)` and `new Ext.Component(...)` syntax.
+ * Supports:
+ *   - Ext.create(...)
+ *   - new Ext.Component(...)
+ *   - Raw object declarations with xtype (e.g., const t = { xtype: ... })
  *
  * @param sourceCode - The raw source code containing ExtJS component definitions.
  * @returns Parsed ComponentConfig if found, otherwise null.
@@ -52,6 +56,21 @@ export function parseExtJSCode(sourceCode: string): ComponentConfig | null {
       }
     },
   });
+
+  // Fallback: check for raw object literal assigned to variable (e.g., const t = { xtype: ... })
+  if (!config) {
+    traverse(ast, {
+      VariableDeclarator(path) {
+        if (isObjectExpression(path.node.init)) {
+          const result = parseComponent(path.node.init);
+          // Only treat it as valid if it has a known xtype
+          if (result && result.type !== 'Unknown') {
+            config = result;
+          }
+        }
+      },
+    });
+  }
 
   return config;
 }
