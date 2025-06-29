@@ -12,6 +12,8 @@ export const componentTagMap: Record<string, string> = {
   htmleditor: 'Editor',
   grid: 'DataTable',
   tabpanel: 'TabView',
+  button: 'Button',
+  label: 'Label'
 };
 
 /**

@@ -1,20 +1,22 @@
 /**
- * Represents a generic component configuration parsed from ExtJS.
+ * Defines the intermediate structure for mapping ExtJS components to React JSX.
  */
 export interface ComponentConfig {
-  /**
-   * The xtype or component type (e.g., 'textfield', 'panel')
-   */
+  /** Type of component (e.g., 'textfield', 'panel') */
   type: string;
 
-  /**
-   * Key-value pairs representing component properties.
-   * Values are stored as raw Babel AST nodes for later conversion.
-   */
+  /** React JSX tag name (e.g., 'InputText', 'Panel') */
+  tag: string;
+
+  /** Props assigned to the component */
   props: Record<string, any>;
 
-  /**
-   * Optional list of child components (nested items)
-   */
+  /** Optional label, button text, etc. */
+  label?: string;
+
+  /** Event handlers (onClick, onChange, etc.) */
+  events?: Record<string, string>;
+
+  /** Nested child components */
   items?: ComponentConfig[];
 }

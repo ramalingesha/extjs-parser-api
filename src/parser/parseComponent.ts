@@ -1,6 +1,6 @@
 import * as t from '@babel/types';
 import { ComponentConfig } from '../types/ComponentTypes';
-import { mapXtypeToReactTag } from './mappings';
+import { mapXtypeToReactTag } from '../mappings/mappings';
 
 /**
  * Parses an ObjectExpression representing an ExtJS component config.

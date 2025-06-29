@@ -1,43 +1,44 @@
 import { ComponentConfig } from '../types/ComponentTypes';
-import { mapXtypeToReactTag } from '../mappings/mappings';
-import * as t from '@babel/types';
+import { formatJSXPropValue } from '../utils/formatJSXPropValue';
 
 /**
- * Converts a ComponentConfig into JSX code.
- *
- * @param component - The parsed component configuration
- * @returns A string of JSX representing the React component
+ * Generates JSX code from a ComponentConfig object
+ * Handles:
+ *  - Known tag mapping
+ *  - All props (not just whitelisted)
+ *  - Children rendering
+ *  - TODO comments placed before tag
  */
-export function generateJSX(component: ComponentConfig): string {
-  const { type, props, items } = component;
+export function generateJSXCode(component: ComponentConfig): string {
+  const { tag, type, props = {}, items = [], events = {}, label } = component;
 
-  const tag = mapXtypeToReactTag(type);
   const propEntries: string[] = [];
+  const todoComments: string[] = [];
 
-  for (const key in props) {
-    const node = props[key];
-    if (!node) continue;
+  // Include all props in JSX
+  for (const [key, value] of Object.entries(props)) {
+    if (key === 'xtype') continue;
 
-    // Convert string literals and identifiers to JSX props
-    if (t.isStringLiteral(node)) {
-      propEntries.push(`${key}="${node.value}"`);
-    } else if (t.isNumericLiteral(node)) {
-      propEntries.push(`${key}={${node.value}}`);
-    } else if (t.isBooleanLiteral(node)) {
-      propEntries.push(`${key}={${node.value}}`);
-    } else if (t.isIdentifier(node)) {
-      propEntries.push(`${key}={${node.name}}`);
-    } else if (t.isObjectExpression(node)) {
-      propEntries.push(`${key}={{...}}`); // Placeholder for objects
+    const formatted = formatJSXPropValue(value);
+    if (formatted !== null) {
+      propEntries.push(`${key}=${formatted}`);
+    } else {
+      todoComments.push(`// TODO: Unhandled prop: ${key}`);
     }
   }
 
-  const propString = propEntries.length > 0 ? ' ' + propEntries.join(' ') : '';
-
-  if (items && items.length > 0) {
-    const children = items.map(generateJSX).join('\n');
-    return `<${tag}${propString}>\n${children}\n</${tag}>`;
+  // Include known events
+  for (const [eventKey, handler] of Object.entries(events)) {
+    propEntries.push(`${eventKey}={${handler}}`);
   }
 
-  return `<${tag}${propString} />`;
+  const propsString = propEntries.length > 0 ? ' ' + propEntries.join(' ') : '';
+  const childrenJSX = items.map(generateJSXCode).join('\n');
+  const isSelfClosing = childrenJSX.trim() === '' && !label && (!items || items.length === 0);
+
+  if (isSelfClosing) {
+    return `${todoComments.join('\n')}\n<${tag}${propsString} />`;
+  }
+
+  return `${todoComments.join('\n')}\n<${tag}${propsString}>\n  ${childrenJSX}\n</${tag}>`;
 }

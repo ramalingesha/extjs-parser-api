@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { parseExtJSCode } from '../parser/extParser';
 import fs from 'fs';
-import { generateJSX } from '../generator/generator';
+import { generateJSXCode } from '../generator/generator';
 
 /**
  * Controller to handle ExtJS to React JSX conversion request.
@@ -24,7 +24,7 @@ export const handleParse = async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
-  const jsxCode = generateJSX(componentConfig);
+  const jsxCode = generateJSXCode(componentConfig);
 
   res.json({ jsxCode });
 };
